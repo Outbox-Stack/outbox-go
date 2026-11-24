@@ -92,10 +92,29 @@ type MessageSummary struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-// MessageEvent is one step in a message's delivery history.
+// MessageEvent is one step in a message's delivery history, such as "sent", "delivered",
+// "bounced", "soft_bounced", "delayed", "skipped" or "complained".
 type MessageEvent struct {
 	Type string    `json:"type"`
 	At   time.Time `json:"at"`
+	// Subtype is the provider's bounce or delay category, when it reports one.
+	Subtype string `json:"subtype"`
+	// Diagnostic is the receiving server's SMTP reply, when there was one.
+	Diagnostic string `json:"diagnostic"`
+}
+
+// DeliveryProblem is a plain-language reading of why a message didn't reach the inbox.
+type DeliveryProblem struct {
+	// Code is for example "address_not_found", "domain_not_found", "mailbox_full",
+	// "unverified_address", "previously_bounced", "rejected_by_receiver", "bounced",
+	// "temporary_failure" or "delayed".
+	Code       string `json:"code"`
+	Title      string `json:"title"`
+	Detail     string `json:"detail"`
+	Action     string `json:"action"`
+	Diagnostic string `json:"diagnostic"`
+	// Pending is true while the provider is still retrying.
+	Pending bool `json:"pending"`
 }
 
 type MessageDetail struct {
@@ -113,9 +132,12 @@ type MessageDetail struct {
 	TemplateID        string            `json:"template_id"`
 	Extras            json.RawMessage   `json:"extras"`
 	Metadata          map[string]string `json:"metadata"`
+	CampaignID        string            `json:"campaign_id"`
 	Events            []MessageEvent    `json:"events"`
-	UpdatedAt         time.Time         `json:"updated_at"`
-	SentAt            *time.Time        `json:"sent_at"`
+	// Problem explains why it didn't reach the inbox, when the latest feedback was a bounce, delay or skip.
+	Problem   *DeliveryProblem `json:"problem"`
+	UpdatedAt time.Time        `json:"updated_at"`
+	SentAt    *time.Time       `json:"sent_at"`
 	// Test is true for messages sent with a test API key.
 	Test bool `json:"test"`
 }
@@ -132,7 +154,9 @@ type CancelResult struct {
 }
 
 type Suppression struct {
-	Email     string    `json:"email"`
+	Email string `json:"email"`
+	// Reason is "bounce", "complaint", "unsubscribe", "manual", or "unverified" when Amazon's
+	// pre-send address check judged the inbox very unlikely to exist.
 	Reason    string    `json:"reason"`
 	CreatedAt time.Time `json:"created_at"`
 }

@@ -39,8 +39,12 @@ type MessageEventData struct {
 	BounceSubtype string `json:"bounce_subtype"`
 	// Diagnostic is the receiving server's SMTP reply, when the provider reports one.
 	Diagnostic string `json:"diagnostic"`
-	// Reason: message.deferred gives "soft_bounce" or "delivery_delay"; message.failed says why it won't be sent.
-	Reason          string `json:"reason"`
+	// Reason: message.deferred gives "soft_bounce" or "delivery_delay"; message.suppressed gives a
+	// suppression reason, or "known_dead_address" when mail to it bounced recently for another sender;
+	// message.failed says why it won't be sent.
+	Reason string `json:"reason"`
+	// Description is message.suppressed's reason in plain words.
+	Description     string `json:"description"`
 	SoftBounceCount int    `json:"soft_bounce_count"`
 	// Suppressed reports whether this event added the address to your suppressions.
 	Suppressed bool `json:"suppressed"`

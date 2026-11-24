@@ -33,7 +33,7 @@ import (
 )
 
 // Version is the SDK version sent in the User-Agent header.
-const Version = "0.1.0"
+const Version = "0.2.0"
 
 const defaultBaseURL = "https://outboxstack.app"
 
@@ -187,6 +187,8 @@ func (c *Client) GetMessage(ctx context.Context, id string) (*MessageDetail, err
 // ListMessagesOptions filter and page through messages.
 type ListMessagesOptions struct {
 	Status string
+	// Stream is "transactional" or "marketing".
+	Stream string
 	// To matches recipients whose address contains this text (case-insensitive).
 	To string
 	// Limit is 1-200. Default 50.
@@ -199,6 +201,7 @@ type ListMessagesOptions struct {
 func (c *Client) ListMessagesPage(ctx context.Context, o ListMessagesOptions) (*MessagePage, error) {
 	q := url.Values{}
 	set(q, "status", o.Status)
+	set(q, "stream", o.Stream)
 	set(q, "to", o.To)
 	if o.Limit > 0 {
 		q.Set("limit", strconv.Itoa(o.Limit))
@@ -265,8 +268,9 @@ func (c *Client) AddSuppression(ctx context.Context, email string) error {
 	return c.do(ctx, http.MethodPost, "/v1/suppressions", map[string]string{"email": email}, "", true, nil)
 }
 
-// RemoveSuppression removes a "manual" suppression. Bounces, complaints and unsubscribes can't be
-// removed (Code "conflict"). Not retried automatically: a retry after a lost response would report
+// RemoveSuppression removes a "manual" or "unverified" suppression; removing an "unverified" one also
+// skips Amazon's address check for that address from then on. Bounces, complaints and unsubscribes
+// can't be removed (Code "conflict"). Not retried automatically: a retry after a lost response would report
 // "not_found" for an address that was removed.
 func (c *Client) RemoveSuppression(ctx context.Context, email string) error {
 	if err := checkEmail(email); err != nil {

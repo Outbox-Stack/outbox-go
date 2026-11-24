@@ -39,7 +39,7 @@ Also: `SendBatch` (1–100 messages, each may carry `IdempotencyKey`) and `GetMe
 ## Find messages
 
 ```go
-it := client.IterateMessages(ctx, outbox.ListMessagesOptions{Status: "bounced", To: "@example.com"})
+it := client.IterateMessages(ctx, outbox.ListMessagesOptions{Status: "bounced", Stream: "marketing", To: "@example.com"})
 for it.Next() {
 	m := it.Message()
 	fmt.Println(m.ID, m.ToEmail, m.CreatedAt)
@@ -48,6 +48,8 @@ if err := it.Err(); err != nil { ... }
 ```
 
 To page by hand, call `ListMessagesPage` and pass `Next` back as `After` until it's empty.
+
+`GetMessage` returns the message with its `Events`. When the latest feedback was a bounce, delay or skip, `Problem` explains it in plain words (`Code`, `Title`, `Detail`, `Action`).
 
 ## Cancel, suppress
 
@@ -59,8 +61,10 @@ if errors.As(err, &apiErr) && apiErr.Code == "not_cancellable" {
 }
 
 client.AddSuppression(ctx, "ada@example.com")    // needs a full-access key
-client.RemoveSuppression(ctx, "ada@example.com") // manual suppressions only
+client.RemoveSuppression(ctx, "ada@example.com") // manual and unverified suppressions only
 ```
+
+An `unverified` suppression means Amazon's pre-send check judged the address very unlikely to exist. Removing it also skips that check for the address from then on.
 
 ## Errors
 
@@ -86,6 +90,7 @@ http.HandleFunc("/hooks/outbox", func(w http.ResponseWriter, r *http.Request) {
 		markUndeliverable(data.To)
 	}
 	// message.deferred is a soft bounce or delay: not final, so don't give up on the address.
+	// message.suppressed was never sent: data.Reason and data.Description say why.
 	w.WriteHeader(http.StatusOK)
 })
 ```

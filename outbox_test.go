@@ -115,17 +115,25 @@ func TestBatchRetriedOnlyWithKeys(t *testing.T) {
 
 func TestIterateMessagesAndSuppressions(t *testing.T) {
 	c, calls := server(t, reply(200, `{"messages":[{"id":"1"},{"id":"2"}],"next":"c1"}`), reply(200, `{"messages":[{"id":"3"}],"next":null}`))
-	it := c.IterateMessages(context.Background(), ListMessagesOptions{Status: "bounced"})
+	it := c.IterateMessages(context.Background(), ListMessagesOptions{Status: "bounced", Stream: "marketing"})
 	ids := []string{}
 	for it.Next() {
 		ids = append(ids, it.Message().ID)
 	}
-	if it.Err() != nil || strings.Join(ids, ",") != "1,2,3" || (*calls)[1].query != "after=c1&status=bounced" {
+	if it.Err() != nil || strings.Join(ids, ",") != "1,2,3" || (*calls)[1].query != "after=c1&status=bounced&stream=marketing" {
 		t.Fatalf("iterate: %v %v %+v", it.Err(), ids, *calls)
 	}
 	c, calls = server(t, reply(503, `{"error":"busy"}`))
 	if err := c.RemoveSuppression(context.Background(), "a+b@example.com"); err == nil || len(*calls) != 1 || (*calls)[0].path != "/v1/suppressions/a+b@example.com" {
 		t.Fatalf("remove suppression: %v %+v", err, *calls)
+	}
+}
+
+func TestGetMessageProblem(t *testing.T) {
+	c, _ := server(t, reply(200, `{"id":"`+msgID+`","status":"suppressed","campaign_id":null,"events":[{"type":"skipped","at":"2026-11-24T10:00:00Z","subtype":"EmailValidationSuppressed"}],"problem":{"code":"unverified_address","title":"Not sent","detail":"d","action":"a"}}`))
+	m, err := c.GetMessage(context.Background(), msgID)
+	if err != nil || m.Problem == nil || m.Problem.Code != "unverified_address" || m.Problem.Pending || len(m.Events) != 1 || m.Events[0].Subtype != "EmailValidationSuppressed" || m.CampaignID != "" {
+		t.Fatalf("message detail: %v %+v", err, m)
 	}
 }
 
@@ -177,5 +185,9 @@ func TestVerifyWebhook(t *testing.T) {
 	}
 	if _, err := VerifyWebhook(body, h, secret, &VerifyOptions{Now: time.Unix(1700000000+301, 0)}); !errors.Is(err, ErrWebhookVerification) {
 		t.Error("stale timestamp accepted")
+	}
+	suppressed := WebhookEvent{Type: "message.suppressed", Data: []byte(`{"to":"a@b.co","reason":"known_dead_address","description":"Not sent: this address doesn't exist."}`)}
+	if data, err := suppressed.MessageData(); err != nil || data.Reason != "known_dead_address" || data.Description != "Not sent: this address doesn't exist." {
+		t.Fatalf("suppressed data: %v %+v", err, data)
 	}
 }
